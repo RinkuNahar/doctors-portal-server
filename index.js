@@ -12,6 +12,8 @@ const port = process.env.PORT || 5000;
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.fyytq.mongodb.net/myFirstDatabase?retryWrites=true&w=majority`;
 
+console.log(uri);
+
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
 
 function verifyJWT(req, res, next) {
@@ -36,6 +38,17 @@ async function run() {
         const bookingsCollection = client.db("doctors_portal").collection('bookings');
         const userCollection = client.db("doctors_portal").collection('users');
         const doctorCollection = client.db("doctors_portal").collection('doctors');
+
+        const verifyAdmin = async(req, res, next) =>{
+            const requester = req.decoded.email;
+            const requesterAccount = await userCollection.findOne({email: requester});
+            if(requesterAccount.role === 'admin'){
+                next();
+            }
+            else{
+                res.status(403).send({message: 'forbidden'});
+            }
+        }
 
         //    services.json er data newar jonno
         app.get('/service', async (req, res) => {
@@ -75,22 +88,14 @@ async function run() {
         })
 
         // user er email theke admin pabo
-        app.put('/user/admin/:email', verifyJWT, async (req, res) => {
+        app.put('/user/admin/:email', verifyJWT, verifyAdmin, async (req, res) => {
             const email = req.params.email;
-            const requester = req.decoded.email;
-            const requesterAccount = await userCollection.findOne({email: requester});
-            if(requesterAccount.role === 'admin'){
                 const filter = { email: email };
                 const updateDoc = {
                     $set: {role: 'admin'},
                 };
-                const result = await userCollection.updateOne(filter, updateDoc, );
-                
+                const result = await userCollection.updateOne(filter, updateDoc, );    
                 res.send( result );
-            }
-            else{
-                res.status(403).send({message: 'forbidden'});
-            }
            
         });
 
@@ -159,13 +164,28 @@ async function run() {
             return res.send({ success: true, result });
         });
 
-        app.post('/doctor', async(req, res)=>{
+        // Manage doctors
+        app.get('/doctor', verifyJWT, verifyAdmin, async(req,res)=>{
+            const doctors = await doctorCollection.find().toArray();
+            res.send(doctors);
+        })
+
+        app.post('/doctor', verifyJWT, verifyAdmin, async(req, res)=>{
             const doctor = req.body;
             const result = await doctorCollection.insertOne(doctor);
             res.send(result);
-        })
+        });
+
+        // delete doctor
+        app.delete('/doctor/:email', verifyJWT, verifyAdmin, async (req, res) => {
+            const email = req.params.email;
+            const filter = {email: email};
+            const result = await doctorCollection.deleteOne(filter);
+            res.send(result);
+          });
 
     }
+
     finally {
 
     }
