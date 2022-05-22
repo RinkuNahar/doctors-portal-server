@@ -2,7 +2,8 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
 app.use(cors());
@@ -49,6 +50,21 @@ async function run() {
                 res.status(403).send({message: 'forbidden'});
             }
         }
+
+        // create payment 
+        app.post('/create-payment-intent', verifyJWT, async(req,res)=>{
+            const service = req.body;
+            console.log(service);
+            const price = service.price;
+            const amount = price*100;
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: 'usd',
+                payment_method_types:['card']
+            });
+            res.send({clientSecret: paymentIntent.client_secret})
+
+        })
 
         //    services.json er data newar jonno
         app.get('/service', async (req, res) => {
@@ -151,6 +167,14 @@ async function run() {
               return res.status(403).send({ message: 'forbidden access' });
             }
           
+        });
+
+        // payment er jonno 
+        app.get('/booking/:id', verifyJWT, async(req, res)=>{
+            const id = req.params.id;
+            const query = {_id: ObjectId(id)};
+            const booking = await bookingsCollection.findOne(query);
+            res.send(booking);
         })
 
         // Add a new booking:user j booking dicche setar information pabo
